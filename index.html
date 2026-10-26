@@ -248,6 +248,110 @@
         #save-name-btn:hover { box-shadow: 0 0 30px #ff0000; }
 
         .hidden { display: none !important; }
+
+        /* --- ДОНАТ МАГАЗИН --- */
+        #donate-btn {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 25px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(45deg, #ff0000, #ffaa00);
+            border: 2px solid #ffaa00;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 0 20px #ff4500;
+            z-index: 6;
+            animation: firePulse 1.5s infinite alternate;
+        }
+        #donate-btn:hover { transform: translateX(-50%) scale(1.1); box-shadow: 0 0 40px #ff0000; }
+
+        #donate-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(20, 0, 0, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 500;
+        }
+
+        #donate-box {
+            background: rgba(30, 5, 5, 0.95);
+            border: 3px solid #ff4500;
+            border-radius: 20px;
+            box-shadow: 0 0 40px #ff0000, inset 0 0 20px rgba(255, 69, 0, 0.3);
+            padding: 30px;
+            width: 480px;
+            max-width: 90vw;
+            max-height: 85vh;
+            overflow-y: auto;
+            color: #ffccaa;
+            text-align: center;
+        }
+
+        #donate-box h2 {
+            margin: 0 0 10px 0;
+            font-size: 32px;
+            color: #ff4500;
+            text-shadow: 0 0 20px #ff0000;
+        }
+
+        #donate-box .donate-note {
+            font-size: 14px;
+            color: #ff8866;
+            margin-bottom: 20px;
+        }
+
+        .donate-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 2px solid rgba(255, 69, 0, 0.5);
+            border-radius: 12px;
+            padding: 12px 15px;
+            margin-bottom: 12px;
+            background: rgba(255, 69, 0, 0.08);
+        }
+
+        .donate-item-info { text-align: left; }
+        .donate-item-info .di-title { font-size: 18px; font-weight: bold; color: #ffaa00; text-shadow: 0 0 10px #ff0000; }
+        .donate-item-info .di-desc { font-size: 13px; color: #ffccaa; }
+
+        .donate-buy-btn {
+            padding: 8px 18px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(45deg, #ff0000, #ff4500);
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 0 10px #ff4500;
+            white-space: nowrap;
+        }
+        .donate-buy-btn:hover { box-shadow: 0 0 25px #ff0000; transform: scale(1.05); }
+        .donate-buy-btn:disabled { background: #552211; opacity: 0.6; cursor: not-allowed; box-shadow: none; transform: none; }
+
+        #donate-close-btn {
+            margin-top: 10px;
+            padding: 10px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(45deg, #770000, #aa2200);
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        #donate-close-btn:hover { box-shadow: 0 0 20px #ff0000; }
+
+        /* Активные бонусы от доната */
+        body.donate-glow #circle { box-shadow: 0 0 60px #ffaa00, inset 0 0 40px #ff4500; }
+        body.donate-glow #score-display { font-size: 30px; color: #ffd700; }
     </style>
 </head>
 <body>
@@ -256,6 +360,7 @@
         <div id="score-display">Время: 0.0с</div>
         <div id="countdown" class="hidden">3</div>
         <div id="circle" class="hidden"></div>
+        <button id="donate-btn">💸 Донат</button>
 
         <!-- ТАБЛИЦА РЕКОРДОВ -->
         <div id="records-panel">
@@ -290,6 +395,16 @@
     </div>
 
     <div id="red-flash"></div>
+
+    <!-- ДОНАТ МОДАЛКА -->
+    <div id="donate-modal" class="hidden">
+        <div id="donate-box">
+            <h2>💸 Донат 🔥</h2>
+            <p class="donate-note">Поддержи игру — получи огненные бонусы! (Демо-режим: оплата не настоящая)</p>
+            <div id="donate-items"></div>
+            <button id="donate-close-btn">Закрыть</button>
+        </div>
+    </div>
 
     <!-- СКРИМЕР -->
     <div id="screamer" class="hidden">
@@ -327,11 +442,12 @@
         
         let startTime = 0;
         let currentScore = 0;
+        let shieldUsed = false;
         let animationFrameId;
 
         // --- ТАБЛИЦА РЕКОРДОВ ---
         const RECORDS_KEY = 'fireGameRecords';
-        const MAX_RECORDS = 10;
+        const MAX_RECORDS = 5;
 
         function loadRecords() {
             try {
@@ -348,6 +464,7 @@
         }
 
         function renderRecords(highlightIndex = -1) {
+            const donates = loadDonates();
             const records = loadRecords();
             if (records.length === 0) {
                 recordsBody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#ff8866;">Пока пусто…</td></tr>';
@@ -355,7 +472,7 @@
             }
             recordsBody.innerHTML = records.map((r, i) =>
                 `<tr${i === highlightIndex ? ' class="record-new"' : ''}>` +
-                `<td>${i + 1}</td><td>${r.name}</td><td>${r.score.toFixed(1)}с</td></tr>`
+                `<td>${i + 1}</td><td>${donates.premium ? '👑 ' : ''}${r.name}</td><td>${r.score.toFixed(1)}с</td></tr>`
             ).join('');
         }
 
@@ -497,6 +614,7 @@
             isPreview = true; 
             radius = 100;
             currentScore = 0;
+            shieldUsed = false; // «Огненный щит» прощает одно выведение курсора за игру
             
             const randomAngle = Math.random() * Math.PI * 2;
             const startSpeed = 6;
@@ -575,15 +693,24 @@
 
                 const dist = Math.sqrt(Math.pow(mouseX - circleX, 2) + Math.pow(mouseY - circleY, 2));
                 if (dist > radius) {
-                    gameOver();
-                    return;
+                    // Донат «Огненный щит»: прощает одно выведение курсора за игру
+                    const donates = loadDonates();
+                    if (donates.shield && !shieldUsed) {
+                        shieldUsed = true;
+                        mouseX = circleX;
+                        mouseY = circleY;
+                    } else {
+                        gameOver();
+                        return;
+                    }
                 }
 
                 currentScore = (Date.now() - startTime) / 1000;
                 scoreDisplay.textContent = `Время: ${currentScore.toFixed(1)}с`;
 
                 if (radius > 30) {
-                    radius -= 0.03; 
+                    // Донат «Замедление круга»: круг сужается в 2 раза медленнее
+                    radius -= loadDonates().slowmo ? 0.015 : 0.03; 
                     circle.style.width = (radius * 2) + 'px';
                     circle.style.height = (radius * 2) + 'px';
                 }
@@ -616,6 +743,76 @@
         nameInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') saveNameBtn.click();
         });
+
+        // --- ДОНАТ МАГАЗИН ---
+        const donateBtn = document.getElementById('donate-btn');
+        const donateModal = document.getElementById('donate-modal');
+        const donateItemsEl = document.getElementById('donate-items');
+        const donateCloseBtn = document.getElementById('donate-close-btn');
+        const DONATE_KEY = 'fireGameDonates';
+
+        const donateShop = [
+            { id: 'glow',    title: '🔥 Огненное свечение', desc: 'Круг светится ярче, счёт золотой!', price: '99 ₽' },
+            { id: 'shield',  title: '🛡️ Огненный щит',      desc: 'Прощает одно выведение курсора за игру', price: '149 ₽' },
+            { id: 'slowmo',  title: '🐢 Замедление круга',  desc: 'Круг сужается в 2 раза медленнее', price: '199 ₽' },
+            { id: 'premium', title: '👑 Премиум-имя',       desc: 'Твоя запись в таблице с короной 👑', price: '299 ₽' }
+        ];
+
+        function loadDonates() {
+            try {
+                return JSON.parse(localStorage.getItem(DONATE_KEY)) || {};
+            } catch (e) { return {}; }
+        }
+
+        function saveDonates(donates) {
+            try {
+                localStorage.setItem(DONATE_KEY, JSON.stringify(donates));
+            } catch (e) {}
+        }
+
+        function applyDonates() {
+            const donates = loadDonates();
+            document.body.classList.toggle('donate-glow', !!donates.glow);
+        }
+
+        function renderDonateShop() {
+            const donates = loadDonates();
+            donateItemsEl.innerHTML = donateShop.map(item => {
+                const owned = !!donates[item.id];
+                return `<div class="donate-item">
+                    <div class="donate-item-info">
+                        <div class="di-title">${item.title}</div>
+                        <div class="di-desc">${item.desc}</div>
+                    </div>
+                    <button class="donate-buy-btn" data-id="${item.id}" ${owned ? 'disabled' : ''}>
+                        ${owned ? '✅ Куплено' : item.price}
+                    </button>
+                </div>`;
+            }).join('');
+        }
+
+        donateBtn.addEventListener('click', () => {
+            renderDonateShop();
+            donateModal.classList.remove('hidden');
+        });
+
+        donateCloseBtn.addEventListener('click', () => {
+            donateModal.classList.add('hidden');
+        });
+
+        donateItemsEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('.donate-buy-btn');
+            if (!btn || btn.disabled) return;
+            const id = btn.dataset.id;
+            const donates = loadDonates();
+            donates[id] = true;
+            saveDonates(donates);
+            applyDonates();
+            renderDonateShop();
+            btn.textContent = '✅ Спасибо!';
+        });
+
+        applyDonates();
     </script>
 </body>
 </html>
