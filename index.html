@@ -166,6 +166,87 @@
             opacity: 0; pointer-events: none; z-index: 100; transition: opacity 0.1s ease;
         }
 
+        /* --- ТАБЛИЦА РЕКОРДОВ (сдвинута вправо, чтобы не перекрывать игру) --- */
+        #records-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;          /* сдвиг от края, чтобы не перекрывать игру */
+            width: 260px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            background: rgba(20, 0, 0, 0.85);
+            border: 2px solid #ff4500;
+            border-radius: 15px;
+            box-shadow: 0 0 20px #ff0000, inset 0 0 15px rgba(255, 69, 0, 0.3);
+            padding: 15px;
+            color: #ffccaa;
+            z-index: 5;
+            pointer-events: none; /* панель не мешает управлять курсором в игре */
+        }
+
+        #records-panel h2 {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+            color: #ff4500;
+            text-align: center;
+            text-shadow: 0 0 15px #ff0000;
+        }
+
+        #records-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 16px;
+        }
+
+        #records-table th {
+            color: #ffaa00;
+            text-shadow: 0 0 10px #ff0000;
+            border-bottom: 2px solid #ff4500;
+            padding: 6px 4px;
+            text-align: left;
+        }
+
+        #records-table td {
+            padding: 5px 4px;
+            border-bottom: 1px solid rgba(255, 69, 0, 0.3);
+        }
+
+        #records-table tr.record-new td {
+            color: #fff;
+            background: rgba(255, 69, 0, 0.25);
+            text-shadow: 0 0 10px #ff0000;
+            font-weight: bold;
+        }
+
+        /* --- ФОРМА ВВОДА ИМЕНИ ПОСЛЕ ПРОИГРЫША --- */
+        #name-form {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        #name-input {
+            padding: 10px 15px;
+            font-size: 18px;
+            border: 2px solid #ff4500;
+            border-radius: 10px;
+            background: #1a0000;
+            color: #ffccaa;
+            outline: none;
+        }
+        #save-name-btn {
+            padding: 10px 20px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(45deg, #ff0000, #ff4500);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 0 15px #ff4500;
+        }
+        #save-name-btn:hover { box-shadow: 0 0 30px #ff0000; }
+
         .hidden { display: none !important; }
     </style>
 </head>
@@ -175,6 +256,19 @@
         <div id="score-display">Время: 0.0с</div>
         <div id="countdown" class="hidden">3</div>
         <div id="circle" class="hidden"></div>
+
+        <!-- ТАБЛИЦА РЕКОРДОВ -->
+        <div id="records-panel">
+            <h2>🔥 Рекорды 🔥</h2>
+            <table id="records-table">
+                <thead>
+                    <tr><th>#</th><th>Имя</th><th>Время</th></tr>
+                </thead>
+                <tbody id="records-body">
+                    <tr><td colspan="3" style="text-align:center; color:#ff8866;">Пока пусто…</td></tr>
+                </tbody>
+            </table>
+        </div>
 
         <div id="start-screen" class="overlay">
             <h1>🔥 Игра «Огонь» 🔥</h1>
@@ -186,6 +280,11 @@
         <div id="game-over-screen" class="overlay hidden">
             <h1 style="color: #ff0000; text-shadow: 0 0 30px #ff0000;">Вы сгорели!</h1>
             <p>Вы продержались в огне: <span id="final-score">0.0</span> секунд</p>
+            <div id="name-form">
+                <input type="text" id="name-input" placeholder="Ваше имя" maxlength="15">
+                <button id="save-name-btn">Сохранить рекорд</button>
+            </div>
+            <br>
             <button id="restart-btn">Попробовать снова</button>
         </div>
     </div>
@@ -210,6 +309,9 @@
         const redFlash = document.getElementById('red-flash');
         const screamer = document.getElementById('screamer');
         const screamerContent = document.getElementById('screamer-content');
+        const recordsBody = document.getElementById('records-body');
+        const nameInput = document.getElementById('name-input');
+        const saveNameBtn = document.getElementById('save-name-btn');
 
         let isPlaying = false;
         let isPreview = false;
@@ -226,6 +328,50 @@
         let startTime = 0;
         let currentScore = 0;
         let animationFrameId;
+
+        // --- ТАБЛИЦА РЕКОРДОВ ---
+        const RECORDS_KEY = 'fireGameRecords';
+        const MAX_RECORDS = 10;
+
+        function loadRecords() {
+            try {
+                return JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function saveRecords(records) {
+            try {
+                localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+            } catch (e) {}
+        }
+
+        function renderRecords(highlightIndex = -1) {
+            const records = loadRecords();
+            if (records.length === 0) {
+                recordsBody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#ff8866;">Пока пусто…</td></tr>';
+                return;
+            }
+            recordsBody.innerHTML = records.map((r, i) =>
+                `<tr${i === highlightIndex ? ' class="record-new"' : ''}>` +
+                `<td>${i + 1}</td><td>${r.name}</td><td>${r.score.toFixed(1)}с</td></tr>`
+            ).join('');
+        }
+
+        function addRecord(name, score) {
+            const safeName = (name.trim() || 'Без имени')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const records = loadRecords();
+            records.push({ name: safeName, score: score });
+            records.sort((a, b) => b.score - a.score);
+            const trimmed = records.slice(0, MAX_RECORDS);
+            saveRecords(trimmed);
+            const idx = trimmed.findIndex(r => r.name === safeName && r.score === score);
+            renderRecords(idx);
+        }
+
+        renderRecords();
 
         // --- 10 РАЗНЫХ СКРИМЕРОВ ---
         const screamers = [
@@ -459,6 +605,17 @@
 
         startBtn.addEventListener('click', prepareGame);
         restartBtn.addEventListener('click', prepareGame);
+
+        // Сохранение рекорда после проигрыша
+        saveNameBtn.addEventListener('click', () => {
+            addRecord(nameInput.value, currentScore);
+            nameInput.value = '';
+            saveNameBtn.textContent = 'Сохранено!';
+            setTimeout(() => { saveNameBtn.textContent = 'Сохранить рекорд'; }, 1500);
+        });
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') saveNameBtn.click();
+        });
     </script>
 </body>
 </html>
